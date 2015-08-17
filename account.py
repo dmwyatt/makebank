@@ -4,9 +4,9 @@ from decimal import Decimal
 import datetime
 
 from bs4 import BeautifulSoup
-import requests
 
-from helpers import set_query_parameter, BASE_URL, BASIC_HEADERS, BEAUTIFULSOUP_PARSER, get_input_value_ided_as
+from helpers import set_query_parameter, get_input_value_ided_as
+from constants import BASIC_HEADERS, BEAUTIFULSOUP_PARSER, BASE_URL
 
 
 class Account:

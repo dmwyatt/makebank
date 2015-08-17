@@ -3,16 +3,17 @@ import logging
 import operator
 import pprint
 from urllib.parse import urljoin, urlparse
-import re
 
 from bs4 import BeautifulSoup
+import bs4
 import execjs
 import requests
 from slimit import ast
 from slimit.parser import Parser
 from slimit.visitors import nodevisitor
 
-from helpers import lazy_property, BASIC_HEADERS, script_from_script_tag, BEAUTIFULSOUP_PARSER, get_input_value_ided_as
+from helpers import lazy_property, script_from_script_tag, get_input_value_ided_as
+from constants import BASIC_HEADERS, BEAUTIFULSOUP_PARSER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -67,8 +68,7 @@ class LoginManager:
     9.  We POST the encrypted password and get the root account page and an authenticated session.
 
     """
-    referer = 'https://web9.secureinternetbank.com/pbi_pbi1961/pbi1961.ashx?wci=RemoteLogin&logonby=connect3&prmaccess=Account&rt=081908833'
-    default_logout_url = 'https://web9.secureinternetbank.com/pbi_pbi1961/PBI1961.ashx?SPTN=C257E9A1E4FA401185D47F0D94C17A4C&WCI=Logout&WCE=Logout'
+    sec_chall_referer = 'https://web9.secureinternetbank.com/pbi_pbi1961/pbi1961.ashx?wci=RemoteLogin&logonby=connect3&prmaccess=Account&rt=081908833'
 
     def __init__(self, raw_session: requests.Session, access_id: str, password: str, security_questions: tuple) -> None:
         self.session = raw_session
@@ -79,7 +79,9 @@ class LoginManager:
     @lazy_property
     def root_page_soup(self) -> BeautifulSoup:
         """
-        Lazily get the content of the root page.  This action also causes self.session to be an authenticated session.
+        Lazily get the content of the root page.  This creates an authenticated session in self.session.
+
+        A lazy property, meaning that the soup is only calculated/retrieved/parsed on first access.
         """
         modulus = get_input_value_ided_as(self._password_page_soup.body, 'Modulus')
         public_exp = get_input_value_ided_as(self._password_page_soup.body, 'PublicExponent')
@@ -121,8 +123,10 @@ class LoginManager:
 
         return BeautifulSoup(response.text, BEAUTIFULSOUP_PARSER)
 
-    @lazy_property
-    def _auto_login_action_url(self):
+    @property
+    def _auto_login_action_url(self) -> str:
+        """ The url to post the autoLogin form data to."""
+
         assert self._auto_login_pre_post_soup.body.form.has_attr(
             'action'), "Unable to parse the autoLogin page prior to POSTing"
 
@@ -130,14 +134,23 @@ class LoginManager:
 
     @lazy_property
     def _pre_login_sptn(self) -> str:
+        """The SPTN we post to self._auto_login_action_url.
+
+        A lazy property, meaning we only do the search on the first access.
+        """
+
         return self._auto_login_pre_post_soup.body.form.input['value']
 
     @lazy_property
     def _security_challenge_url(self) -> str:
+        """Submits the autoLogin page so we can get the script containing the url to the security challenge page.
+
+        A lazy property, meaning we only do the request/search/parsing on the first access.
+        """
         logger.info('Handling autoLogin.')
         data = {"SPTN": self._pre_login_sptn}
         headers = dict(BASIC_HEADERS)
-        headers['Referer'] = self.referer
+        headers['Referer'] = self.sec_chall_referer
 
         logger.debug('POSTing autologin to: %s', self._auto_login_action_url)
         logger.debug('POSTing autologin with headers: \n%s', pprint.pformat(headers))
@@ -152,6 +165,10 @@ class LoginManager:
 
     @lazy_property
     def _access_id_post_url(self) -> str:
+        """Gets the URL to POST the access id to from the global.js script.
+
+        A lazy property, meaning we only do the search on the first access.
+        """
         logger.info('Parsing global.js from www.belgradestatebank.com for URL to POST access id to.')
         resp = requests.get("https://www.belgradestatebank.com/custom/belgradestatebank/javascript/global.js")
         assert resp.status_code == requests.codes.ok, "Unable to get URL for POSTing access_id."
@@ -162,6 +179,8 @@ class LoginManager:
         """
         Gets the soup for the page after submitting access id and
         before posting the autologin form on that page.
+
+        A lazy property, meaning we only do the request/parsing on the first access.
         """
         logger.info('POSTing access id.')
         data = {"AccessID": self.access_id, "submit": "Submit"}
@@ -177,6 +196,10 @@ class LoginManager:
 
     @lazy_property
     def _password_page_soup(self) -> BeautifulSoup:
+        """ Gets the soup for the page where we enter the password.
+
+        A lazy property, meaning we only do the request/parse on the first access.
+        """
         data = {
             "QuestionAnswer": _find_security_question_answer(self._security_challenge_soup.body.text,
                                                              self.security_questions),
@@ -196,6 +219,10 @@ class LoginManager:
 
     @lazy_property
     def _security_challenge_soup(self) -> BeautifulSoup:
+        """ Gets the soup for the page where we answer the security challenge.
+
+        A lazy property, meaning we only do the request/parse on the first access.
+        """
         response = self.session.get(self._security_challenge_url)
         assert response.status_code == requests.codes.ok, \
             "Unable to get security challenge page.  Received status: {}".format(response.status_code)
@@ -211,11 +238,15 @@ class LoginManager:
         return soup
 
     @property
-    def _security_challenge_post_url(self):
+    def _security_challenge_post_url(self) -> str:
+        """ The url we post the security challenge response to."""
+
         return urljoin(self._security_challenge_url, self._security_challenge_soup.body.form['action'])
 
 
-def _find_redirect_script(page_text: str):
+def _find_redirect_script(page_text: str) -> bs4.Tag:
+    """ Parses text for a script that sets window.location. """
+
     post_response_soup = BeautifulSoup(page_text, BEAUTIFULSOUP_PARSER)
     script = [script for script in post_response_soup.find_all('script') if
               script.string and 'window.location' in script.string]
@@ -225,6 +256,7 @@ def _find_redirect_script(page_text: str):
 
 
 def _parse_global_js_for_access_id_action_url(global_js: str) -> str:
+    """ Parse global.js, provided as a string, for the url to post access id to. """
     parser = Parser()
     tree = parser.parse(global_js)
 
@@ -250,6 +282,7 @@ def _parse_global_js_for_access_id_action_url(global_js: str) -> str:
 
 
 def _parse_redirect_to_security_challenge_script(script: str) -> str:
+    """ Parses the script which redirects us to security challenge page and gets that URL. """
     parser = Parser()
     tree = parser.parse(script)
     nodes = [node for node in nodevisitor.visit(tree) if isinstance(node, ast.Assign)]
@@ -261,6 +294,9 @@ def _parse_redirect_to_security_challenge_script(script: str) -> str:
 
 
 def _is_security_challenge_page(page_text: str, security_questions: tuple) -> bool:
+    """ Checks if any of our security challenge questions are in the provided text.  If so,
+    assume is security challenge page. """
+
     for question, response in security_questions:
         if question in page_text:
             return True
@@ -268,12 +304,18 @@ def _is_security_challenge_page(page_text: str, security_questions: tuple) -> bo
 
 
 def _find_security_question_answer(page_text: str, security_questions: tuple) -> str:
+    """  Finds question in page text and returns answer. """
     for challenge, response in security_questions:
         if challenge in page_text:
             return response
 
 
 def _rsa_encrypt(session: requests.Session, url: str, modulus: str, public_exp: str, rsaiv: str, pw: str):
+    """ Hilariously runs the RSA javascript with some of our own javascript injected so that we can
+    get the correct ciphertext for our password.
+
+     Eventually need to switch to using a Python library once we figure out how to do that.
+    """
     rsaencrypt_response = session.get(url)
     assert rsaencrypt_response.status_code == requests.codes.ok, \
         "Unable to get RSAEncrypt.js.  Status: {}\nBody:\n{}".format(rsaencrypt_response.status_code,
@@ -304,6 +346,7 @@ def _rsa_encrypt(session: requests.Session, url: str, modulus: str, public_exp: 
 
 
 def _get_RSAEncrypt_url(soup: BeautifulSoup, base_url: str) -> str:
+    """ Finds the script tag pointing to `RSAEncrypt.js` and returns an absolute url for it. """
     script_tags = soup('script')
     for script_tag in script_tags:
         src = script_tag.get('src', '')
@@ -315,23 +358,25 @@ def _get_RSAEncrypt_url(soup: BeautifulSoup, base_url: str) -> str:
 
 
 def _is_root_page(page_text: str) -> bool:
+    """ Tests if provided page_text is our root page...aka the account list page."""
     required_text = ["Log Off", "Your last login", "List Of Accounts", "Today.s Transactions",
                      "LandingPageWelcomeMessage"]
     for text in required_text:
-        assert re.search(text, page_text, re.IGNORECASE), "missing {}".format(text)
+        if not text in page_text:
+            return False
     return True
 
 
 def main():
     import keyring
     import json
-    from helpers import KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY
+    from constants import KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY
 
-    SECURITY_QUESTIONS = json.loads(keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY))
-    ACCESS_ID = keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_USERNAME_KEY)
-    PASSWORD = keyring.get_password(KEYRING_SERVICE_NAME, ACCESS_ID)
+    security_questions = json.loads(keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY))
+    access_id = keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_USERNAME_KEY)
+    password = keyring.get_password(KEYRING_SERVICE_NAME, access_id)
 
-    l = LoginManager(requests.Session(), ACCESS_ID, PASSWORD, SECURITY_QUESTIONS)
+    l = LoginManager(requests.Session(), access_id, password, security_questions)
     rps = l.root_page_soup
     print(rps.body.option)
     return rps

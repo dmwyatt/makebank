@@ -9,7 +9,9 @@ import datetime
 import requests
 
 from account import Account
-from helpers import lazy_property, BEAUTIFULSOUP_PARSER, ACCT_LIST_URL, BASE_URL
+from helpers import lazy_property, ACCT_LIST_URL, BASE_URL
+from constants import BEAUTIFULSOUP_PARSER, KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY, BASE_URL, \
+    ACCT_LIST_URL
 from login import LoginManager
 
 ACCT_TEXT_REGEX = re.compile(r"(?P<acct_name>.*) (?P<acct_number>\d+) (?P<acct_bal>\$-?\d+\.\d\d)$")
