@@ -42,7 +42,7 @@ class Session:
                         account_data.number,
                         account_data.balance) for account_data in accounts]
 
-    @lazy_property
+    @property
     def _parsed_root_soup(self) -> BeautifulSoup:
         return self.login_manager.root_page_soup
 
