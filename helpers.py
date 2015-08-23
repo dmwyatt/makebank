@@ -1,7 +1,9 @@
 import ast
 from collections import namedtuple
 import operator
+import os
 from urllib.parse import urlsplit, urlencode, urlunsplit, parse_qs
+import re
 
 import bs4
 import requests
@@ -82,7 +84,7 @@ def parse_global_js_for_access_id_action_url(global_js):
     return url_parts.protocol[0] + url_parts.roDomain[0] + url_parts.ro[0] + url_parts.rt[0]
 
 
-def set_query_parameter(url: str, param_name: str, param_value: str) -> str:
+def set_query_parameter(url: str, param_name: str, param_value: str, remove_existing=False) -> str:
     """Given a URL, set or replace a query parameter and return the
     modified URL.
 
@@ -91,9 +93,25 @@ def set_query_parameter(url: str, param_name: str, param_value: str) -> str:
 
     """
     scheme, netloc, path, query_string, fragment = urlsplit(url)
-    query_params = parse_qs(query_string)
+    query_params = parse_qs(query_string) if not remove_existing else {}
 
     query_params[param_name] = [param_value]
+    new_query_string = urlencode(query_params, doseq=True)
+
+    return urlunsplit((scheme, netloc, path, new_query_string, fragment))
+
+
+def remove_query_parameters(url: str) -> str:
+    scheme, netloc, path, query_string, fragment = urlsplit(url)
+    return urlunsplit((scheme, netloc, path, {}, fragment))
+
+
+def add_query_params(url: str, params: dict, remove_existing=False) -> str:
+    scheme, netloc, path, query_string, fragment = urlsplit(url)
+
+    query_params = parse_qs(query_string) if not remove_existing else {}
+
+    query_params.update(params)
     new_query_string = urlencode(query_params, doseq=True)
 
     return urlunsplit((scheme, netloc, path, new_query_string, fragment))
@@ -105,3 +123,12 @@ def script_from_script_tag(script_tag: bs4.Tag):
         return
 
     return raw.strip().replace("<!--", "").replace("-->", "").strip()
+
+
+def replace_file_extension(path: str, new_ext: str):
+    new_ext = re.sub('^\.*', '', new_ext)
+    return os.path.splitext(path)[0] + '.' + new_ext
+
+
+def has_extension(path: str):
+    return bool(os.path.splitext(path)[1])

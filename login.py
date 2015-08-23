@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import bs4
 import execjs
+import re
 import requests
 from slimit import ast
 from slimit.parser import Parser
@@ -362,7 +363,8 @@ def _is_root_page(page_text: str) -> bool:
     required_text = ["Log Off", "Your last login", "List Of Accounts", "Today.s Transactions",
                      "LandingPageWelcomeMessage"]
     for text in required_text:
-        if not text in page_text:
+        if not re.search(text, page_text, re.IGNORECASE):
+            logger.debug("missing '{}' in root page text.".format(text))
             return False
     return True
 
