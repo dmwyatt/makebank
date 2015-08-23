@@ -1,23 +1,28 @@
 from collections import namedtuple
+import logging
+from pprint import pprint
 import re
 from decimal import Decimal
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 import bs4
-import datetime
 import requests
 
 from account import Account
-from helpers import lazy_property, ACCT_LIST_URL, BASE_URL
-from constants import BEAUTIFULSOUP_PARSER, KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY, BASE_URL, \
+from helpers import lazy_property
+from constants import BASE_URL, \
     ACCT_LIST_URL
 from login import LoginManager
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
 
 ACCT_TEXT_REGEX = re.compile(r"(?P<acct_name>.*) (?P<acct_number>\d+) (?P<acct_bal>\$-?\d+\.\d\d)$")
 
 
-class Session:
+class BelgradeSession:
     def __init__(self, access_id: str, password: str, security_questions: tuple) -> None:
         self.password = password
         self.access_id = access_id
@@ -90,13 +95,14 @@ def _parse_select_for_account_options(select: BeautifulSoup) -> list:
 if __name__ == '__main__':
     import keyring
     import json
-    from helpers import KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY
+    from constants import KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY, KEYRING_USERNAME_KEY
 
     SECURITY_QUESTIONS = json.loads(keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_QUESTIONS_KEY))
     ACCESS_ID = keyring.get_password(KEYRING_SERVICE_NAME, KEYRING_USERNAME_KEY)
     PASSWORD = keyring.get_password(KEYRING_SERVICE_NAME, ACCESS_ID)
-    s = Session(ACCESS_ID, PASSWORD, SECURITY_QUESTIONS)
+    s = BelgradeSession(ACCESS_ID, PASSWORD, SECURITY_QUESTIONS)
     kc = s.get_account("Kasasa Checking")
     print(kc)
 
-    stmt = kc.download_activity(datetime.date(2015, 8, 1), datetime.date.today(), 'export.qfx')
+    rt = kc.recent_transactions
+    pprint(rt)
