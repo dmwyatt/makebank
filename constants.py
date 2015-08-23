@@ -9,5 +9,5 @@ BEAUTIFULSOUP_PARSER = 'html.parser'
 KEYRING_SERVICE_NAME = 'belgrade'
 KEYRING_QUESTIONS_KEY = 'questions'
 KEYRING_USERNAME_KEY = 'username'
-BASE_URL = "https://web9.secureinternetbank.com/pbi_pbi1961/"
+BASE_URL = "https://web9.secureinternetbank.com/pbi_pbi1961/PBI1961.ashx"
 ACCT_LIST_URL = "https://web9.secureinternetbank.com/pbi_pbi1961/PBI1961.ashx?SPTN=2E4DBA2FF93E4383ADDFDF296FC1B15A&WCI=AcctLst"
